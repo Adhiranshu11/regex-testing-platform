@@ -1,0 +1,927 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Regular Expression Testing Platform</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky nav with four views (Tester, Dashboard, Compare, About). The tester opens with a dark hero band that holds the regex field and a live machine, then a left rail for test strings and a right column for the automata. Stage colours are fixed everywhere: NFA blue, DFA orange, minimal DFA aqua. */
+:root{
+  --bg:#edf1f5; --surface:#ffffff; --surface-2:#f3f6fa; --ink:#0b1b2b; --ink-2:#465a6e; --muted:#74869a; --line:#d8e0e9; --grid:#e6ecf2;
+  --accent:#0a6c9a; --accent-ink:#ffffff; --accent-soft:#e0f0f8;
+  --amber:#c97a00; --amber-soft:#fff0cf;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --good:#0ca30c; --crit:#d03b3b;
+  --ok:#0f7f45; --ok-soft:#d8f5e3; --bad:#c42b3a; --bad-soft:#fde0e3;
+  --canvas:#f7fafc; --node:#ffffff; --node-line:#14233a; --edge:#6a7c93;
+  --shadow:0 1px 2px rgba(11,27,43,.05),0 10px 28px -14px rgba(11,27,43,.22);
+  --f-display:"Bricolage Grotesque","Segoe UI",system-ui,sans-serif;
+  --f-body:"IBM Plex Sans","Segoe UI",system-ui,-apple-system,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0a111a; --surface:#111b27; --surface-2:#162331; --ink:#e8eff6; --ink-2:#a2b4c5; --muted:#7f92a5; --line:#233346; --grid:#1a2836;
+  --accent:#58c4ee; --accent-ink:#04202f; --accent-soft:#12303f;
+  --amber:#ffb53d; --amber-soft:#3b2d0c;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --ok:#4fd88b; --ok-soft:#0f3322; --bad:#ff7b88; --bad-soft:#3d151b;
+  --canvas:#0d1722; --node:#16243a; --node-line:#a9bdd6; --edge:#6f849e;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0a111a; --surface:#111b27; --surface-2:#162331; --ink:#e8eff6; --ink-2:#a2b4c5; --muted:#7f92a5; --line:#233346; --grid:#1a2836;
+  --accent:#58c4ee; --accent-ink:#04202f; --accent-soft:#12303f;
+  --amber:#ffb53d; --amber-soft:#3b2d0c;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --ok:#4fd88b; --ok-soft:#0f3322; --bad:#ff7b88; --bad-soft:#3d151b;
+  --canvas:#0d1722; --node:#16243a; --node-line:#a9bdd6; --edge:#6f849e;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 28px -14px rgba(0,0,0,.7); color-scheme:dark}
+
+*,*::before,*::after{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:15px/1.55 var(--f-body);padding-inline:clamp(16px,4vw,40px);padding-block:0 64px;-webkit-text-size-adjust:100%}
+.app{max-width:1260px;margin:0 auto}
+button,input,textarea{font:inherit;color:inherit}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px;border-radius:6px}
+h1,h2,h3{font-family:var(--f-display);text-wrap:balance;margin:0}
+code,.mono{font-family:var(--f-mono)}
+.vh{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+[hidden]{display:none!important}
+
+/* nav */
+.nav{position:sticky;top:env(safe-area-inset-top,0px);z-index:30;display:flex;align-items:center;gap:18px;padding-block:12px;background:var(--bg);background:color-mix(in srgb,var(--bg) 88%,transparent);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+.brand{display:flex;align-items:center;gap:10px;flex:none;font:700 1.02rem var(--f-display);letter-spacing:-.01em}
+.mark{width:44px;height:28px;flex:none}
+.mark circle{fill:var(--surface);stroke:var(--ink);stroke-width:2}
+.mark .on{fill:var(--amber);stroke:var(--amber)}
+.mark path{fill:none;stroke:var(--ink-2);stroke-width:2}
+.tabs2{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin-left:auto;min-width:0}
+.tabs2::-webkit-scrollbar{display:none}
+.tabs2 button{flex:none;cursor:pointer;border:0;background:transparent;border-radius:999px;padding:8px 15px;font-weight:500;color:var(--ink-2)}
+.tabs2 button:hover{background:var(--surface-2);color:var(--ink)}
+.tabs2 button[aria-selected="true"]{background:var(--ink);color:var(--bg)}
+@media (max-width:640px){.brand span{display:none}.nav{gap:8px}}
+
+/* generic */
+.btn{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 14px;font-weight:500;line-height:1.2;min-height:38px}
+.btn:hover:not(:disabled){border-color:var(--accent)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+.btn.amber{background:#ffb53d;border-color:#ffb53d;color:#1b1203;font-weight:700;padding-inline:20px}
+.btn.amber:hover:not(:disabled){background:#ffc462;border-color:#ffc462}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);padding:clamp(14px,2.4vw,20px);min-width:0}
+.panel h2,.card h3{font-size:1.05rem;font-weight:700;letter-spacing:-.01em}
+.lbl{font:500 .72rem/1.2 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.hint{color:var(--ink-2);font-size:.84rem}
+.field{display:grid;gap:6px}
+.err{padding:10px 12px;border-radius:10px;background:var(--bad-soft);color:var(--bad);font-size:.9rem;font-weight:500}
+textarea,.in{width:100%;background:var(--surface-2);border:1.5px solid var(--line);border-radius:12px;padding:10px 12px;font:400 .98rem/1.6 var(--f-mono)}
+textarea{min-height:118px;resize:vertical}
+textarea:focus,.in:focus{outline:0;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.seg{display:flex;flex-wrap:wrap;gap:6px}
+.seg button{cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 13px;font-size:.86rem;font-weight:500}
+.seg button:hover{border-color:var(--accent)}
+.seg button[aria-selected="true"],.seg button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.badge{flex:none;font:600 .66rem/1 var(--f-mono);letter-spacing:.08em;padding:5px 8px;border-radius:999px}
+.badge.ok{background:var(--ok-soft);color:var(--ok)}.badge.bad{background:var(--bad-soft);color:var(--bad)}
+
+/* hero */
+.hero{--ink:#e8f3fb;--ink-2:#9db8cb;--muted:#7f9db3;--line:rgba(150,205,232,.26);--canvas:#0a2133;--node:#10283f;--node-line:#7fd4f0;--edge:#5f8eac;
+  --amber:#ffb53d;--amber-soft:#4a3a12;--ok:#4fd88b;--ok-soft:#0f3a28;--bad:#ff7b88;--bad-soft:#4a1a22;--grid:transparent;
+  position:relative;overflow:hidden;border-radius:22px;color:var(--ink);
+  background:radial-gradient(900px 420px at 88% -12%,rgba(53,200,230,.26),transparent 62%),radial-gradient(620px 320px at -4% 112%,rgba(255,181,61,.12),transparent 62%),linear-gradient(135deg,#06182a,#0a2b42)}
+.hero::before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(150,210,235,.16) 1px,transparent 1.2px);background-size:22px 22px;-webkit-mask-image:linear-gradient(100deg,#000,transparent 70%);mask-image:linear-gradient(100deg,#000,transparent 70%);pointer-events:none}
+.hero-in{position:relative;display:grid;grid-template-columns:minmax(0,1.12fr) minmax(0,1fr);gap:clamp(20px,3vw,40px);align-items:center;padding:clamp(22px,4vw,44px)}
+.hero h1{font-size:clamp(1.9rem,4.4vw,3.15rem);line-height:1.04;font-weight:800;letter-spacing:-.028em;color:#fff}
+.lede{margin:12px 0 22px;color:var(--ink-2);font-size:1.04rem;max-width:52ch}
+.rxbig{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,.07);border:1.5px solid rgba(150,205,232,.34);border-radius:16px;padding:6px 6px 6px 16px;min-width:0}
+.rxbig:focus-within{border-color:#ffb53d;box-shadow:0 0 0 4px rgba(255,181,61,.18)}
+.rxbig>span{font:500 1.5rem var(--f-mono);color:#ffb53d;user-select:none}
+.rxbig input{flex:1;min-width:0;border:0;background:transparent;padding:10px 0;font:500 1.2rem var(--f-mono);color:#fff;outline:0}
+.hero .err{margin-top:10px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.chip{cursor:pointer;border:1px solid rgba(150,205,232,.3);background:rgba(255,255,255,.06);color:#d8e9f5;border-radius:999px;padding:6px 13px;font-size:.84rem;font-weight:500}
+.chip:hover{border-color:#ffb53d;color:#fff}
+.hero-card{background:var(--canvas);border:1px solid var(--line);border-radius:18px;padding:16px;min-width:0;box-shadow:0 18px 40px -22px rgba(0,0,0,.6)}
+.hc-top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin-bottom:6px;font-size:.78rem;color:var(--ink-2)}
+.hc-top code{color:#fff;font-size:.9rem}
+.hc-top .vd{margin-left:auto}
+.hero .dg{background:none;border:0;border-radius:0;max-height:none;min-height:0;overflow:visible}
+.hero .dg svg{width:100%;height:auto;margin:0}
+@media (max-width:900px){.hero-in{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:480px){.rxbig{flex-wrap:wrap;padding:10px 12px}.rxbig input{flex-basis:60%}.rxbig .btn{width:100%}.rxbig>span{display:none}}
+
+/* tester layout */
+.layout{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:22px;align-items:start;margin-top:22px}
+.col,.rail{display:grid;gap:22px;min-width:0}
+.tl{display:grid;gap:6px;max-height:300px;overflow-y:auto}
+.test{display:flex;align-items:center;gap:10px;width:100%;text-align:left;cursor:pointer;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:7px 10px;font:500 .95rem var(--f-mono);min-width:0}
+.test>span:last-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.test.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+details.guide summary{cursor:pointer;font-weight:600}
+.guide dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 14px;margin:12px 0 0;font-size:.9rem}
+.guide dt{font:500 .88rem var(--f-mono);color:var(--accent)}
+.guide dd{margin:0;color:var(--ink-2)}
+
+/* pipeline */
+.pipe{display:flex;align-items:stretch;gap:6px}
+.stage{--c:var(--ink);flex:1;min-width:0;display:grid;gap:2px;text-align:left;cursor:pointer;background:var(--surface-2);border:1.5px solid var(--line);border-radius:14px;padding:12px 14px}
+.stage[data-t="nfa"]{--c:var(--s1)}.stage[data-t="dfa"]{--c:var(--s2)}.stage[data-t="min"]{--c:var(--s3)}
+.stage:hover{border-color:var(--c)}
+.stage[aria-selected="true"]{background:var(--surface);border-color:var(--c);box-shadow:0 0 0 2px var(--c) inset}
+.stage .nm{display:flex;align-items:center;gap:8px;font:600 .72rem/1 var(--f-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--ink-2)}
+.stage .nm::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--c);flex:none}
+.stage .num{font:700 2.3rem/1.05 var(--f-body);letter-spacing:-.02em}
+.stage .sub{font-size:.76rem;line-height:1.3;color:var(--ink-2)}
+.arw{display:flex;align-items:center;color:var(--muted);flex:none}
+.arw svg{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:2}
+.facts{display:flex;flex-wrap:wrap;gap:6px 22px;margin-top:12px;font-size:.88rem;color:var(--ink-2)}
+.facts b{color:var(--ink);font-family:var(--f-mono);font-weight:600}
+
+/* trace viewer */
+.viewer{display:grid;gap:14px}
+.vh2{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}
+.vd{font:600 .68rem/1 var(--f-mono);letter-spacing:.1em;padding:6px 10px;border-radius:999px;background:var(--surface-2);color:var(--ink-2)}
+.vd.ok{background:var(--ok-soft);color:var(--ok)}.vd.bad{background:var(--bad-soft);color:var(--bad)}
+.tape{display:flex;flex-wrap:wrap;gap:4px}
+.cell{min-width:2.2rem;height:2.5rem;padding:0 6px;display:grid;place-items:center;font:500 1.1rem var(--f-mono);border:1.5px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--ink-2)}
+.cell.done{background:var(--accent-soft);border-color:var(--accent);color:var(--ink)}
+.cell.cur{border-color:var(--amber);box-shadow:0 0 0 2px var(--amber-soft);color:var(--ink);background:var(--surface)}
+.cell.fail{background:var(--bad-soft);border-color:var(--bad);color:var(--bad)}
+.tape.ok .cell.done{background:var(--ok-soft);border-color:var(--ok)}
+.hero .cell{background:rgba(255,255,255,.05);color:#b9d0e0}
+.hero .cell.done{background:rgba(88,196,238,.16);border-color:#58c4ee;color:#fff}
+.hero .tape.ok .cell.done{background:var(--ok-soft);border-color:var(--ok)}
+.hero .cell.cur{background:rgba(255,181,61,.16);color:#fff}
+.hero-card .tape{margin-top:10px}
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.ctl .sp{flex:1}
+.ctl .step{font:500 .8rem var(--f-mono);color:var(--ink-2);padding-inline:6px}
+.narr{padding:12px 14px;border-radius:12px;background:var(--amber-soft);border-left:4px solid var(--amber);min-height:3.2rem;font-size:.95rem}
+.narr.ok{background:var(--ok-soft);border-color:var(--ok)}.narr.bad{background:var(--bad-soft);border-color:var(--bad)}
+.dg{background-color:var(--canvas);background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:24px 24px;border:1px solid var(--line);border-radius:12px;overflow:auto;max-height:70vh;min-height:150px}
+.dg svg{display:block;margin:0 auto}
+.dg .edge path{fill:none;stroke:var(--edge);stroke-width:1.6}
+.dg .edge .ar{fill:var(--edge)}
+.dg .edge text{font:500 12px var(--f-mono);fill:var(--ink);text-anchor:middle}
+.dg .edge text.h{fill:var(--canvas);stroke:var(--canvas);stroke-width:5px;stroke-linejoin:round}
+.dg .node circle{fill:var(--node);stroke:var(--node-line);stroke-width:1.7}
+.dg .node .in{fill:none}
+.dg .node text{font:600 13px var(--f-body);fill:var(--ink);text-anchor:middle}
+.dg .st .ar{fill:var(--node-line)}.dg .st line{stroke:var(--node-line);stroke-width:1.6}
+.dg .edge.active path{stroke:var(--amber);stroke-width:3}.dg .edge.active .ar{fill:var(--amber)}
+.dg .node.active circle{fill:var(--amber-soft);stroke:var(--amber);stroke-width:2.8}
+.dg .node.ok circle{fill:var(--ok-soft);stroke:var(--ok);stroke-width:2.8}
+.dg .node.bad circle{fill:var(--bad-soft);stroke:var(--bad);stroke-width:2.8}
+
+/* sections, tables */
+.sect{display:grid;gap:12px;align-content:start;min-width:0}
+.sect h2{font-size:1.2rem;font-weight:700;letter-spacing:-.015em}
+.sect p{margin:0}
+.scroll{overflow-x:auto;border:1px solid var(--line);border-radius:12px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font:500 .9rem var(--f-mono);font-variant-numeric:tabular-nums}
+th,td{padding:8px 14px;text-align:center;white-space:nowrap;border-bottom:1px solid var(--line)}
+tbody tr:last-child td{border-bottom:0}
+th{background:var(--surface-2);font:600 .72rem var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+td:first-child,th:first-child{text-align:left}
+td:first-child{font-weight:600}
+tr.trap td:first-child::after{content:" trap";margin-left:8px;font:500 .68rem var(--f-mono);color:var(--bad);background:var(--bad-soft);padding:2px 6px;border-radius:999px}
+.two{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:start}
+.rd{display:grid;grid-template-columns:5.5rem minmax(0,1fr);gap:10px;align-items:start;padding:8px 0;border-bottom:1px dashed var(--line)}
+.rd-l{font:600 .75rem var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--ink-2);padding-top:5px}
+.rd-g{display:flex;flex-wrap:wrap;gap:6px}
+.grp{font:500 .85rem var(--f-mono);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:3px 9px}
+.toks{display:flex;flex-wrap:wrap;gap:6px}
+.tok{font:500 .88rem var(--f-mono);background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:4px 10px}
+.tok i{font:600 .62rem var(--f-mono);letter-spacing:.08em;color:var(--ink-2);font-style:normal;margin-right:7px}
+.sect pre{margin:0;padding:12px 14px;background:var(--surface);border:1px solid var(--line);border-radius:12px;font:500 .88rem/1.5 var(--f-mono);overflow-x:auto}
+.gform{display:flex;flex-wrap:wrap;align-items:end;gap:10px}
+.gform input{width:84px;background:var(--surface-2);border:1.5px solid var(--line);border-radius:10px;padding:8px 10px;font:500 .95rem var(--f-mono)}
+.gform input:focus{outline:0;border-color:var(--accent)}
+.gen{display:flex;flex-wrap:wrap;gap:6px}
+.gen code{padding:4px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:.9rem}
+
+/* views: shared head */
+.view{margin-top:10px;display:grid;gap:22px}
+.vhead{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px 20px;margin-top:6px}
+.vhead h2{font-size:clamp(1.6rem,3.6vw,2.3rem);font-weight:800;letter-spacing:-.025em}
+.vhead p{margin:4px 0 0;color:var(--ink-2);max-width:60ch}
+.vhead code{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:2px 8px;font-size:.9rem}
+.filters{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px}
+
+/* dashboard */
+.kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px 18px;display:grid;gap:4px;align-content:start;box-shadow:var(--shadow);min-width:0}
+.kpi .k-l{font-size:.85rem;color:var(--ink-2);font-weight:500}
+.kpi .k-v{font:600 2rem/1.1 var(--f-body);letter-spacing:-.02em}
+.kpi .k-s{font-size:.82rem;color:var(--ink-2)}
+.kpi.k-hero{grid-column:span 2;grid-row:span 2;align-content:center;gap:8px;padding:22px 24px;
+  background:radial-gradient(520px 260px at 100% 0%,rgba(27,175,122,.18),transparent 65%),var(--surface)}
+.k-big{font:700 clamp(3.4rem,8vw,5.2rem)/1 var(--f-body);letter-spacing:-.035em}
+.k-big small{font:500 1.05rem var(--f-body);color:var(--ink-2);letter-spacing:0;margin-left:8px}
+.k-d{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:.95rem}
+.k-d::before{content:"";width:10px;height:10px;border-radius:50%;background:var(--s3)}
+.dots{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:baseline}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);min-width:0;display:grid;gap:14px;align-content:start}
+.card.wide{grid-column:1/-1}
+.ch{display:flex;align-items:start;justify-content:space-between;gap:12px}
+.ch p{margin:2px 0 0;color:var(--ink-2);font-size:.84rem}
+.vt{display:flex;gap:2px;flex:none;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px}
+.vt button{cursor:pointer;border:0;background:transparent;border-radius:999px;padding:4px 11px;font-size:.78rem;font-weight:500;color:var(--ink-2)}
+.vt button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.tv{display:none}.card.as-table .tv{display:block}.card.as-table .cv{display:none}
+.hb-row{display:grid;grid-template-columns:minmax(70px,118px) minmax(0,1fr);gap:12px;align-items:center;padding:5px 0}
+.hb-l{font-size:.88rem;color:var(--ink-2);display:flex;align-items:center;min-width:0}
+.hb-t{display:flex;align-items:center;gap:8px;border-left:1px solid var(--line);min-height:22px;min-width:0}
+.hb-b{height:18px;border-radius:0 4px 4px 0;min-width:3px;cursor:default}
+.hb-b:hover,.hb-b:focus-visible{filter:brightness(1.12);outline:2px solid var(--ink);outline-offset:1px}
+.hb-v{font:600 .86rem var(--f-body);color:var(--ink);white-space:nowrap}
+.hb-note{margin-top:4px;font-size:.84rem;color:var(--ink-2)}
+.lib{display:grid;gap:4px}
+.lib-row{display:grid;grid-template-columns:minmax(110px,190px) minmax(0,1fr);gap:14px;align-items:center;text-align:left;cursor:pointer;background:transparent;border:1px solid transparent;border-radius:12px;padding:8px 10px;width:100%}
+.lib-row:hover,.lib-row:focus-visible{background:var(--surface-2);border-color:var(--line)}
+.lib-n{display:grid;gap:2px;min-width:0}
+.lib-n b{font-weight:600;font-size:.9rem}
+.lib-n code{font-size:.78rem;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lib-b{display:grid;gap:2px}
+.lib-b .hb-b{height:12px}
+.lib-b .hb-t{min-height:12px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:.84rem;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.sbar{display:flex;gap:2px;height:14px}
+.sbar b{display:block;min-width:4px}
+.sbar b:first-child{border-radius:4px 0 0 4px}.sbar b:last-child{border-radius:0 4px 4px 0}.sbar b:only-child{border-radius:4px}
+.trow{display:grid;grid-template-columns:20px minmax(48px,120px) minmax(0,1fr) auto;gap:10px;align-items:center;padding:4px 0}
+.trow code{font-size:.88rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trow .ic{font-weight:700;text-align:center}
+.trow .ic.ok{color:var(--ok)}.trow .ic.bad{color:var(--bad)}
+.trow .hb-t{border-left:1px solid var(--line)}
+.trow .t-r{font-size:.8rem;color:var(--ink-2);white-space:nowrap}
+.empty{padding:22px 4px;color:var(--ink-2);font-size:.92rem}
+.ax{font:500 11px var(--f-body);fill:var(--muted)}
+.axt{font:500 11px var(--f-body);fill:var(--ink-2)}
+.gl{stroke:var(--grid);stroke-width:1}
+.lv{font:600 12px var(--f-body);fill:var(--ink)}
+.lc svg{display:block;max-width:100%}
+.tip{position:fixed;z-index:60;pointer-events:none;background:var(--ink);color:var(--bg);border-radius:10px;padding:8px 11px;display:grid;gap:1px;font-size:.8rem;max-width:260px;box-shadow:0 10px 30px -10px rgba(0,0,0,.5)}
+.tip strong{font-size:.95rem;font-weight:700}
+.tip span{opacity:.82}
+@media (max-width:1000px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.kpi.k-hero{grid-row:auto}.grid2{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:560px){.lib-row{grid-template-columns:minmax(0,1fr)}.trow{grid-template-columns:20px minmax(40px,80px) minmax(0,1fr)}.trow .t-r{display:none}.hb-row{grid-template-columns:minmax(58px,84px) minmax(0,1fr)}}
+
+/* compare */
+.cmp-in{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:14px;align-items:end}
+.cmp-res{display:grid;gap:16px}
+.verdict{display:flex;flex-wrap:wrap;align-items:center;gap:12px 16px;padding:16px 18px;border-radius:14px;border:1px solid var(--line);background:var(--surface-2)}
+.verdict .big{font:800 1.5rem var(--f-display);letter-spacing:-.02em}
+.verdict.eq{background:var(--ok-soft);border-color:var(--ok)}.verdict.eq .big{color:var(--ok)}
+.verdict.ne{background:var(--bad-soft);border-color:var(--bad)}.verdict.ne .big{color:var(--bad)}
+.verdict p{margin:0;flex:1 1 280px}
+.cmp-d{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.cmp-d .dg{max-height:none}
+@media (max-width:900px){.cmp-in{grid-template-columns:minmax(0,1fr)}.cmp-d{grid-template-columns:minmax(0,1fr)}}
+
+/* about */
+.about-grid{display:grid;grid-template-columns:minmax(0,1.25fr) minmax(0,1fr);gap:32px;align-items:start}
+.about-grid>div{display:grid;gap:12px;min-width:0}
+.about-grid p,.view p.t{margin:0;max-width:62ch;color:var(--ink-2)}
+.steps{margin:0;padding:0;list-style:none;display:grid}
+.steps li{display:grid;grid-template-columns:5.5rem minmax(0,1fr);gap:10px;font-size:.92rem;padding:9px 0;border-bottom:1px dashed var(--line)}
+.steps b{font:600 .72rem var(--f-mono);letter-spacing:.08em;text-transform:uppercase;color:var(--accent);padding-top:3px}
+.team{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px}
+.member{display:grid;gap:16px;align-content:start}
+.mh{display:flex;align-items:center;gap:14px;min-width:0}
+.av{flex:none;width:52px;height:52px;border-radius:50%;display:grid;place-items:center;background:var(--ink);color:var(--bg);font:800 1.1rem var(--f-display)}
+.mh h3{font-size:1.25rem}
+.reg{font:500 .85rem var(--f-mono);color:var(--ink-2)}
+.role{font:600 .72rem/1.3 var(--f-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.tasks{margin:0;padding:0;list-style:none;display:grid;gap:12px}
+.tasks li{display:grid;gap:3px;padding-top:12px;border-top:1px solid var(--line)}
+.tasks b{font-weight:600}
+.tasks span{color:var(--ink-2);font-size:.9rem}
+.tasks code{font-size:.8rem;color:var(--accent);overflow-wrap:anywhere}
+.shared{display:grid;gap:6px;padding:14px 16px;border:1px dashed var(--line);border-radius:12px;min-width:0}
+@media (max-width:760px){.about-grid,.team{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:520px){.steps li{grid-template-columns:minmax(0,1fr);gap:2px}}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}.two{grid-template-columns:minmax(0,1fr);gap:22px}}
+@media (max-width:520px){.stage{padding:10px}.stage .num{font-size:1.8rem}.arw{display:none}.rd{grid-template-columns:minmax(0,1fr)}.rd-l{padding-top:0}}
+@media (prefers-reduced-motion:no-preference){.btn,.stage,.chip,.test,.cell,.narr,.hb-b,.lib-row,.tabs2 button{transition:background-color .15s,border-color .15s,color .15s,box-shadow .15s,filter .15s}}
+</style></head><body>
+<div class="app">
+  <nav class="nav" aria-label="Sections">
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 46 30" aria-hidden="true"><path d="M13 15h7M33 15h-6"/><circle cx="9" cy="15" r="7"/><circle class="on" cx="23" cy="15" r="4.5"/><circle cx="37" cy="15" r="7"/><circle cx="37" cy="15" r="3.6"/></svg>
+      <span>Regex Testing Platform</span>
+    </div>
+    <div class="tabs2" id="nav" role="tablist">
+      <button role="tab" data-v="tester" aria-selected="true" type="button">Tester</button>
+      <button role="tab" data-v="dashboard" aria-selected="false" type="button">Dashboard</button>
+      <button role="tab" data-v="compare" aria-selected="false" type="button">Compare</button>
+      <button role="tab" data-v="about" aria-selected="false" type="button">About and team</button>
+    </div>
+  </nav>
+
+  <!-- ============ TESTER ============ -->
+  <div id="v-tester">
+    <section class="hero" aria-label="Regular expression input">
+      <div class="hero-in">
+        <div>
+          <h1>Regular Expression Testing Platform</h1>
+          <p class="lede">Type a pattern and see the automata it compiles to. Then watch the machine read your test strings one symbol at a time.</p>
+          <label class="vh" for="rx">Regular expression</label>
+          <div class="rxbig"><span aria-hidden="true">/</span><input id="rx" value="(a|b)*abb" autocomplete="off" spellcheck="false" autocapitalize="off"><span aria-hidden="true">/</span><button class="btn amber" id="go" type="button">Build and test</button></div>
+          <div class="err" id="err" role="alert" hidden></div>
+          <div class="chips" id="pre" aria-label="Example expressions"></div>
+        </div>
+        <div class="hero-card" aria-label="Live example">
+          <div class="hc-top"><span>Live example</span><code>(a|b)*abb</code><span class="vd" id="hVd">READING</span></div>
+          <div class="dg" id="heroDg" role="img" aria-label="Minimal DFA for (a|b)*abb reading the string aabb"></div>
+          <div class="tape" id="hTape"></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="layout">
+      <aside class="rail" aria-label="Test strings">
+        <div class="panel" style="display:grid;gap:14px">
+          <div class="field"><label class="lbl" for="ts">Test strings, one per line</label>
+            <textarea id="ts" spellcheck="false" autocapitalize="off">abb
+aabb
+abab
+babb</textarea>
+            <div class="hint">Write ε for the empty string. The whole string must match.</div></div>
+          <button class="btn primary" id="rerun" type="button">Run tests</button>
+          <div class="field"><div class="lbl">Results</div><div class="tl" id="tl"></div></div>
+        </div>
+        <details class="panel guide"><summary>Syntax guide</summary>
+          <dl>
+            <dt>ab</dt><dd>a followed by b</dd>
+            <dt>a|b</dt><dd>a or b</dd>
+            <dt>a* a+ a?</dt><dd>zero or more, one or more, zero or one</dd>
+            <dt>( )</dt><dd>group</dd>
+            <dt>.</dt><dd>any single character</dd>
+            <dt>[a-z] [^x]</dt><dd>one character from a set, or not from it</dd>
+            <dt>\d \w</dt><dd>digit, letter or underscore</dd>
+            <dt>\. \*</dt><dd>a literal special character</dd>
+          </dl>
+        </details>
+      </aside>
+
+      <main class="col">
+        <section class="panel" aria-label="Automata">
+          <div class="pipe" id="pipe" role="tablist" aria-label="Pipeline stage">
+            <button class="stage" role="tab" data-t="nfa" aria-selected="false" type="button"><span class="nm">NFA</span><span class="num" id="n-nfa">0</span><span class="sub">states<br>Thompson</span></button>
+            <span class="arw" aria-hidden="true"><svg viewBox="0 0 18 18"><path d="M3 9h11M10 4l5 5-5 5"/></svg></span>
+            <button class="stage" role="tab" data-t="dfa" aria-selected="true" type="button"><span class="nm">DFA</span><span class="num" id="n-dfa">0</span><span class="sub">states<br>Subset construction</span></button>
+            <span class="arw" aria-hidden="true"><svg viewBox="0 0 18 18"><path d="M3 9h11M10 4l5 5-5 5"/></svg></span>
+            <button class="stage" role="tab" data-t="min" aria-selected="false" type="button"><span class="nm">Minimal</span><span class="num" id="n-min">0</span><span class="sub">states<br><span id="minSub">Hopcroft</span></span></button>
+          </div>
+          <div class="facts"><span>Alphabet <b id="sig"></b></span><span>NFA transitions <b id="ntr"></b></span></div>
+        </section>
+
+        <section class="panel viewer" aria-label="Trace">
+          <div class="vh2"><span class="lbl">Input tape</span><span class="vd" id="vd">READY</span></div>
+          <div class="tape" id="tape"></div>
+          <div class="ctl" id="sp">
+            <button class="btn" id="pv" type="button">Back</button>
+            <button class="btn" id="nx" type="button">Next</button>
+            <button class="btn" id="pl" type="button">Play</button>
+            <span class="step" id="sl"></span>
+            <span class="sp"></span>
+            <button class="btn" id="zo" type="button" aria-label="Zoom out">−</button>
+            <button class="btn" id="zi" type="button" aria-label="Zoom in">+</button>
+            <button class="btn" id="svgBtn" type="button">Save SVG</button>
+            <button class="btn" id="pngBtn" type="button">Save PNG</button>
+            <button class="btn" id="cp" type="button">Copy SVG</button>
+          </div>
+          <div class="narr" id="nr" aria-live="polite"></div>
+          <div class="dg" id="dg"></div>
+          <div class="hint">Amber marks the current state (every active state on the NFA). A DFA's trap state is left out of the drawing and listed in the table. Save SVG and Save PNG download the diagram on the hosted website. If your viewer blocks downloads, use Copy SVG.</div>
+        </section>
+
+        <section class="sect"><h2 id="tt">Transition table</h2><div class="scroll" id="tb"></div></section>
+
+        <section class="sect"><h2>Step 1: tokens and syntax tree</h2>
+          <p class="hint">The tokenizer splits the expression into tokens. The parser then builds the syntax tree that Thompson's Construction reads.</p>
+          <div class="toks" id="toks"></div><pre id="astPre"></pre></section>
+
+        <div class="two">
+          <section class="sect"><h2>Minimization, step by step</h2>
+            <div class="seg algoSeg" role="group" aria-label="Minimization algorithm">
+              <button data-a="hopcroft" aria-pressed="true" type="button">Hopcroft</button>
+              <button data-a="table" aria-pressed="false" type="button">Table-filling</button>
+              <button data-a="moore" aria-pressed="false" type="button">Partition refinement</button>
+            </div>
+            <div class="hint" id="agree"></div>
+            <div id="rounds"></div></section>
+          <section class="sect"><h2>Strings that match</h2>
+            <p class="hint">Random walks on the minimal DFA that never enter a dead end, so every string is accepted.</p>
+            <div class="gform">
+              <div class="field"><label class="lbl" for="gc">How many</label><input id="gc" type="number" value="10" min="1" max="50"></div>
+              <div class="field"><label class="lbl" for="gl">Max length</label><input id="gl" type="number" value="10" min="0" max="60"></div>
+              <button class="btn" id="gen" type="button">Generate</button>
+              <button class="btn" id="use" type="button" hidden>Use as tests</button>
+            </div>
+            <div class="gen" id="genOut"></div>
+          </section>
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <!-- ============ DASHBOARD ============ -->
+  <div class="view" id="v-dash" hidden>
+    <div class="vhead">
+      <div><h2>Dashboard</h2><p>How big each automaton is, how minimization gets there, and how your test strings behave. Showing <code id="dRx"></code></p></div>
+      <button class="btn" id="dOpen" type="button">Edit in tester</button>
+    </div>
+    <div class="filters"><span class="lbl">Minimization algorithm</span>
+      <div class="seg algoSeg" role="group" aria-label="Minimization algorithm">
+        <button data-a="hopcroft" aria-pressed="true" type="button">Hopcroft</button>
+        <button data-a="table" aria-pressed="false" type="button">Table-filling</button>
+        <button data-a="moore" aria-pressed="false" type="button">Partition refinement</button>
+      </div></div>
+    <div class="kpis" id="kpis">
+      <div class="kpi k-hero" id="kHero"></div>
+      <div class="kpi" id="k1"></div><div class="kpi" id="k2"></div><div class="kpi" id="k3"></div><div class="kpi" id="k4"></div>
+    </div>
+    <div class="grid2">
+      <section class="card" id="cSize"><div class="ch"><div><h3>Machine size by stage</h3><p>States in each automaton built from your expression.</p></div><div class="vt"><button data-cv="c" aria-pressed="true" type="button">Chart</button><button data-cv="t" aria-pressed="false" type="button">Table</button></div></div><div class="cv"></div><div class="tv"></div></section>
+      <section class="card" id="cProg"><div class="ch"><div><h3>Minimization progress</h3><p id="cProgSub">Groups of states after each step.</p></div><div class="vt"><button data-cv="c" aria-pressed="true" type="button">Chart</button><button data-cv="t" aria-pressed="false" type="button">Table</button></div></div><div class="cv lc"></div><div class="tv"></div></section>
+      <section class="card" id="cTests"><div class="ch"><div><h3>Test verdicts</h3><p>Symbols the minimal DFA read before it decided.</p></div><div class="vt"><button data-cv="c" aria-pressed="true" type="button">Chart</button><button data-cv="t" aria-pressed="false" type="button">Table</button></div></div><div class="cv"></div><div class="tv"></div></section>
+      <section class="card" id="cBench"><div class="ch"><div><h3>Simulation speed</h3><p id="cBenchSub">Time to read the same strings, measured in this browser.</p></div><div class="vt"><button data-cv="c" aria-pressed="true" type="button">Chart</button><button data-cv="t" aria-pressed="false" type="button">Table</button></div></div><div class="cv"></div><div class="tv"></div></section>
+      <section class="card wide" id="cLib"><div class="ch"><div><h3>Example library</h3><p>States per stage for each example expression. Select a row to open it in the tester.</p></div><div class="vt"><button data-cv="c" aria-pressed="true" type="button">Chart</button><button data-cv="t" aria-pressed="false" type="button">Table</button></div></div><div class="cv"></div><div class="tv"></div></section>
+    </div>
+  </div>
+
+  <!-- ============ COMPARE ============ -->
+  <div class="view" id="v-compare" hidden>
+    <div class="vhead"><div><h2>Compare two expressions</h2><p>Two regular expressions are equivalent when they accept exactly the same strings. The check minimizes both DFAs and searches their combined states for the shortest string that only one of them accepts.</p></div></div>
+    <div class="panel" style="display:grid;gap:14px">
+      <div class="cmp-in">
+        <div class="field"><label class="lbl" for="cmpA">Expression A</label><input class="in" id="cmpA" value="(a|b)*" autocomplete="off" spellcheck="false" autocapitalize="off"></div>
+        <div class="field"><label class="lbl" for="cmpB">Expression B</label><input class="in" id="cmpB" value="(a*b*)*" autocomplete="off" spellcheck="false" autocapitalize="off"></div>
+        <button class="btn primary" id="cmpGo" type="button">Compare</button>
+      </div>
+      <div class="seg" id="cmpPre" aria-label="Example pairs"></div>
+      <div class="err" id="cmpErr" role="alert" hidden></div>
+    </div>
+    <div class="cmp-res" id="cmpRes"></div>
+  </div>
+
+  <!-- ============ ABOUT ============ -->
+  <div class="view" id="v-about" hidden>
+    <div class="vhead"><div><h2>About the project</h2></div></div>
+    <div class="about-grid">
+      <div>
+        <p class="t">Most regex testers tell you whether a string matches and stop there. This platform shows why. It compiles your expression into the automata that decide the match (an NFA, then a DFA, then the smallest equivalent DFA) and lets you step through each test string one symbol at a time.</p>
+        <p class="t">It is a Theory of Computation course project at Vellore Institute of Technology. The aim is to turn Thompson's Construction, Subset Construction and DFA minimization into something you can see and try, instead of something you only read about.</p>
+        <p class="t">The NFA, DFA and minimal DFA were checked against a standard regex engine on every string up to length six for a set of sample expressions, the three minimization algorithms give identical results, and the generated strings always match.</p>
+      </div>
+      <div>
+        <h3>How it works</h3>
+        <ol class="steps">
+          <li><b>Parse</b><span>A tokenizer splits the expression into tokens, then a recursive-descent parser builds the syntax tree. Errors are reported by position.</span></li>
+          <li><b>NFA</b><span>Thompson's Construction turns the tree into an NFA with ε-transitions.</span></li>
+          <li><b>DFA</b><span>Subset Construction removes the nondeterminism using ε-closures.</span></li>
+          <li><b>Minimize</b><span>Hopcroft's algorithm merges states that behave identically. Table-filling and partition refinement are built in too, and all three give the same result.</span></li>
+          <li><b>Explain</b><span>Each string is traced step by step, with the reason it was accepted or rejected.</span></li>
+          <li><b>Generate</b><span>Random walks on the minimal DFA produce strings that always match.</span></li>
+          <li><b>Compare</b><span>Two expressions are equivalent when their minimal DFAs accept the same strings. A search finds the shortest string that tells them apart.</span></li>
+        </ol>
+      </div>
+    </div>
+    <h3 style="font-size:1.4rem">Team and responsibilities</h3>
+    <p class="t">The work is split along the pipeline. Adhiranshu owns the automata algorithms that build and shrink the machines. Govind owns running strings on them, drawing them, and the interface around it all.</p>
+    <div class="team">
+      <article class="panel member">
+        <div class="mh"><span class="av" aria-hidden="true">AS</span><div><h3>Adhiranshu Singh</h3><div class="reg">24BIT0036</div></div></div>
+        <div class="role">Automata construction and minimization</div>
+        <ul class="tasks">
+          <li><b>Regex parser</b><span>Tokenizer, recursive-descent parser, syntax tree, and syntax errors with positions.</span><code>regex_parser.py</code></li>
+          <li><b>NFA generator</b><span>Thompson's Construction for symbols, concatenation, union, star, plus and optional.</span><code>nfa_builder.py</code></li>
+          <li><b>DFA converter</b><span>ε-closure, move, and Subset Construction with an explicit trap state.</span><code>dfa_converter.py, nfa_simulator.py</code></li>
+          <li><b>DFA minimizer</b><span>Hopcroft's algorithm, table-filling and partition refinement, with a log of how states merge.</span><code>dfa_minimizer.py</code></li>
+        </ul>
+      </article>
+      <article class="panel member">
+        <div class="mh"><span class="av" aria-hidden="true">GI</span><div><h3>Govind Innani</h3><div class="reg">24BIT0157</div></div></div>
+        <div class="role">Evaluation, visualization and interface</div>
+        <ul class="tasks">
+          <li><b>String evaluator and explainer</b><span>Runs strings on the automata and narrates each transition and the final verdict.</span><code>explainer.py</code></li>
+          <li><b>Diagrams and export</b><span>State diagram drawing, and export of the automata as SVG and PNG.</span><code>visualizer.py, exporter.py</code></li>
+          <li><b>Random string generator</b><span>Walks the minimal DFA to produce strings guaranteed to match.</span><code>string_generator.py</code></li>
+          <li><b>Interface, integration and testing</b><span>Web interface, dashboard, pipeline integration, test suite, demo script and README.</span><code>engine.py, server.py, test_all.py, demo.py</code></li>
+        </ul>
+      </article>
+    </div>
+    <div class="shared"><div class="role">Shared by both</div><p class="t" style="max-width:none">Requirement analysis and literature survey, system design and architecture, review reports, and the final presentation.</p></div>
+  </div>
+</div>
+<div class="tip" id="tip" hidden></div>
+<script>
+const OTHER="<other>",sh=c=>({"\n":"\\n","\t":"\\t"," ":"␣"}[c]||c);
+const CS=(chars,neg,label)=>({chars,neg,label,m(s){return s===OTHER?neg:chars.has(s)!==neg}});
+const lit=c=>({t:'a',c:CS(new Set([c]),false,sh(c))});
+function tokenize(s){let i=0;const err=(m,p)=>{const e=new Error(m);e.pos=p;throw e},pk=()=>i<s.length?s[i]:null,out=[];
+if(s.length>150)err('Regex is too long (limit 150 characters).');
+const OPS={'|':'UNION','*':'STAR','+':'PLUS','?':'OPTIONAL','(':'LPAREN',')':'RPAREN'};
+function cc(){if(s[i]==='\\'){i++;if(pk()===null)err('Dangling backslash',i-1);const e=s[i++];return e==='n'?'\n':e==='t'?'\t':e}return s[i++]}
+function cls(){const st=i++;let neg=false;if(pk()==='^'){neg=true;i++}const ch=new Set();let first=true;
+for(;;){const c=pk();if(c===null)err("Missing closing ']'",st);
+if(c===']'){if(first)err('Empty character class',st);i++;break}
+const lo=cc();
+if(pk()==='-'&&i+1<s.length&&s[i+1]!==']'){i++;const hi=cc();if(lo>hi)err(`Invalid range '${lo}-${hi}'`,i-1);for(let x=lo.charCodeAt(0);x<=hi.charCodeAt(0);x++)ch.add(String.fromCharCode(x))}else ch.add(lo);
+if(ch.size>300)err('Character class is too large',st);first=false}
+return CS(ch,neg,s.slice(st,i))}
+while(i<s.length){const c=s[i],p=i;
+if(OPS[c]){out.push({k:OPS[c],x:c,p});i++}
+else if(c==='['){const cs=cls();out.push({k:'CLASS',x:s.slice(p,i),p,cs})}
+else if(c==='.'){i++;out.push({k:'ANY',x:'.',p,cs:CS(new Set(),true,'.')})}
+else if(c==='\\'){i++;if(pk()===null)err('Dangling backslash',p);const e=s[i++];
+if(e==='d')out.push({k:'CLASS',x:'\\d',p,cs:CS(new Set('0123456789'),false,'\\d')});
+else if(e==='w')out.push({k:'CLASS',x:'\\w',p,cs:CS(new Set('abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_'),false,'\\w')});
+else out.push({k:'SYMBOL',x:s.slice(p,i),p,cs:CS(new Set([e==='n'?'\n':e==='t'?'\t':e]),false,sh(e==='n'?'\n':e==='t'?'\t':e))})}
+else{i++;out.push({k:'SYMBOL',x:c,p,cs:CS(new Set([c]),false,sh(c))})}}
+return out}
+function parseTokens(tk){let i=0;const err=(m,p)=>{const e=new Error(m);e.pos=p;throw e},pk=()=>i<tk.length?tk[i]:null;
+function rx(){let n=term();while(pk()&&pk().k==='UNION'){i++;n={t:'u',a:n,b:term()}}return n}
+function term(){let n=null;while(pk()&&pk().k!=='UNION'&&pk().k!=='RPAREN'){const f=fac();n=n?{t:'c',a:n,b:f}:f}return n||{t:'e'}}
+function fac(){let n=atom();while(pk()&&(pk().k==='STAR'||pk().k==='PLUS'||pk().k==='OPTIONAL')){n={t:{STAR:'*',PLUS:'+',OPTIONAL:'?'}[pk().k],a:n};i++}return n}
+function atom(){const t=pk();
+if(t.k==='LPAREN'){i++;const n=rx();if(!pk()||pk().k!=='RPAREN')err("Missing closing ')'",t.p);i++;return n}
+if(t.k==='SYMBOL'||t.k==='ANY'||t.k==='CLASS'){i++;return{t:'a',c:t.cs}}
+err(`Nothing to repeat before '${t.x}'`,t.p)}
+const n=rx();if(i<tk.length)err("Unmatched ')'",tk[i].p);return n}
+const parse=s=>parseTokens(tokenize(s));
+function astText(n,d=0){const p='  '.repeat(d);
+if(n.t==='e')return p+'ε (empty)';
+if(n.t==='a')return p+'Symbol  '+n.c.label;
+if(n.t==='c'||n.t==='u')return[p+(n.t==='c'?'Concat':'Union (|)'),astText(n.a,d+1),astText(n.b,d+1)].join('\n');
+return p+({'*':'Star (*)','+':'Plus (+)','?':'Optional (?)'}[n.t])+'\n'+astText(n.a,d+1)}
+function nfa(ast){const tr=[],ns=()=>tr.push([])-1,add=(a,l,b)=>tr[a].push([l,b]);
+function f(n){if(n.t==='c'){const[ls,le]=f(n.a),[rs,re]=f(n.b);add(le,null,rs);return[ls,re]}
+const s=ns(),e=ns();
+if(n.t==='e')add(s,null,e);else if(n.t==='a')add(s,n.c,e);
+else if(n.t==='u'){const[ls,le]=f(n.a),[rs,re]=f(n.b);add(s,null,ls);add(s,null,rs);add(le,null,e);add(re,null,e)}
+else{const[a,b]=f(n.a);add(s,null,a);add(b,null,e);if(n.t==='*'){add(s,null,e);add(b,null,a)}else if(n.t==='+')add(b,null,a);else add(s,null,e)}
+return[s,e]}
+const[st,ac]=f(ast);return{tr,start:st,accept:ac}}
+const clo=(N,S)=>{const r=new Set(S),st=[...S];while(st.length){const x=st.pop();for(const[l,t]of N.tr[x])if(l===null&&!r.has(t)){r.add(t);st.push(t)}}return r};
+const mv=(N,S,y)=>{const r=new Set();for(const x of S)for(const[l,t]of N.tr[x])if(l&&l.m(y))r.add(t);return r};
+const srt=S=>[...S].sort((a,b)=>a-b),key=S=>srt(S).join(',');
+function nsim(N,t){let c=clo(N,[N.start]);const tr=[{c:null,s:srt(c)}];for(const x of Array.from(t)){c=clo(N,mv(N,c,x));tr.push({c:x,s:srt(c)});if(!c.size)return[false,tr]}return[c.has(N.accept),tr]}
+function dfa(N){const chars=new Set();let other=false;
+for(const e of N.tr)for(const[l]of e)if(l){l.chars.forEach(c=>chars.add(c));if(l.neg)other=true}
+const al=[...chars].sort();if(other)al.push(OTHER);
+const D={al,start:0,acc:new Set(),tr:[{}],mem:[],pre:'D',mp:'q'},s0=clo(N,[N.start]),ids=new Map([[key(s0),0]]),q=[s0];D.mem[0]=srt(s0);
+for(let qi=0;qi<q.length;qi++){const S=q[qi],id=ids.get(key(S));
+for(const y of al){const T=clo(N,mv(N,S,y)),k=key(T);
+if(!ids.has(k)){if(ids.size>=500)throw new Error('The DFA would need more than 500 states. Try a simpler expression.');const nid=ids.size;ids.set(k,nid);D.tr[nid]={};D.mem[nid]=srt(T);q.push(T)}
+D.tr[id][y]=ids.get(k)}}
+q.forEach((S,i)=>{if(S.has(N.accept))D.acc.add(i)});return D}
+const sym=(D,c)=>D.al.includes(c)?c:D.al.includes(OTHER)?OTHER:null;
+function trap(D){if(D._t)return D._t;const n=D.tr.length,rev=Array.from({length:n},()=>[]);
+D.tr.forEach((r,s)=>Object.values(r).forEach(t=>rev[t].push(s)));
+const live=new Set(D.acc),st=[...live];while(st.length){const x=st.pop();rev[x].forEach(p=>{if(!live.has(p)){live.add(p);st.push(p)}})}
+return D._t=new Set([...Array(n).keys()].filter(s=>!live.has(s)))}
+function snapG(D,blk){const g={};blk.forEach((x,s)=>(g[x]=g[x]||[]).push('D'+s));return Object.values(g).sort((p,q)=>parseInt(p[0].slice(1))-parseInt(q[0].slice(1)))}
+const METHODS={hopcroft:"Hopcroft's algorithm",table:'Table-filling algorithm',moore:'Partition refinement (Moore)'};
+function mooBlocks(D){const n=D.tr.length;let blk=[...Array(n).keys()].map(s=>D.acc.has(s)?1:0);const log=[{label:'Start',groups:snapG(D,blk)}];
+for(;;){const sg=new Map(),nb=[];for(let s=0;s<n;s++){const k=blk[s]+'|'+D.al.map(a=>blk[D.tr[s][a]]).join(',');if(!sg.has(k))sg.set(k,sg.size);nb[s]=sg.get(k)}
+const done=sg.size===new Set(blk).size;blk=nb;if(done)break;log.push({label:'Round '+log.length,groups:snapG(D,blk)})}
+return[blk,log]}
+function hopBlocks(D){const n=D.tr.length,al=D.al;
+const inv=al.map(()=>Array.from({length:n},()=>[]));D.tr.forEach((r,s)=>al.forEach((a,k)=>inv[k][r[a]].push(s)));
+const F=new Set(),NF=new Set();for(let s=0;s<n;s++)(D.acc.has(s)?F:NF).add(s);
+const P=[F,NF].filter(b=>b.size),W=P.length===2?[F.size<=NF.size?F:NF]:[];
+const toBlk=()=>{const b=[];P.forEach((B,i)=>B.forEach(s=>b[s]=i));return b};
+const log=[{label:'Start',groups:snapG(D,toBlk())}];
+while(W.length){const A=W.pop();
+for(let k=0;k<al.length;k++){const X=new Set();A.forEach(t=>inv[k][t].forEach(s=>X.add(s)));
+for(const Y of [...P]){const I=new Set([...Y].filter(s=>X.has(s))),R=new Set([...Y].filter(s=>!X.has(s)));
+if(I.size&&R.size){P.splice(P.indexOf(Y),1,I,R);const wi=W.indexOf(Y);
+if(wi>=0)W.splice(wi,1,I,R);else W.push(I.size<=R.size?I:R);
+log.push({label:'Split '+log.length,groups:snapG(D,toBlk())})}}}}
+return[toBlk(),log]}
+function tabBlocks(D){const n=D.tr.length,al=D.al,m=new Set(),key=(p,q)=>p<q?p*n+q:q*n+p;
+for(let p=0;p<n;p++)for(let q=p+1;q<n;q++)if(D.acc.has(p)!==D.acc.has(q))m.add(key(p,q));
+const classes=()=>{const b=[];for(let s=0;s<n;s++){b[s]=s;for(let t=0;t<s;t++)if(!m.has(key(t,s))){b[s]=b[t];break}}return b};
+const log=[{label:'Start',groups:snapG(D,classes())}];
+for(;;){const nw=[];
+for(let p=0;p<n;p++)for(let q=p+1;q<n;q++){if(m.has(key(p,q)))continue;
+for(const a of al){const x=D.tr[p][a],y=D.tr[q][a];if(x!==y&&m.has(key(x,y))){nw.push(key(p,q));break}}}
+if(!nw.length)break;nw.forEach(k=>m.add(k));log.push({label:'Pass '+log.length,groups:snapG(D,classes())})}
+return[classes(),log]}
+function fromBlocks(D,blk){const n=D.tr.length,rep={},mem={};
+for(let s=0;s<n;s++){if(rep[blk[s]]===undefined)rep[blk[s]]=s;(mem[blk[s]]=mem[blk[s]]||[]).push(s)}
+const M={al:D.al,start:0,acc:new Set(),tr:[],mem:[],pre:'M',mp:'D'},ord=new Map([[blk[0],0]]),q=[blk[0]];
+for(let i=0;i<q.length;i++)for(const a of D.al){const tb=blk[D.tr[rep[q[i]]][a]];if(!ord.has(tb)){ord.set(tb,ord.size);q.push(tb)}}
+ord.forEach((id,b)=>{M.tr[id]={};D.al.forEach(a=>M.tr[id][a]=ord.get(blk[D.tr[rep[b]][a]]));M.mem[id]=mem[b];if(D.acc.has(rep[b]))M.acc.add(id)});
+return M}
+function minim(D,method='hopcroft'){const[blk,log]=({hopcroft:hopBlocks,table:tabBlocks,moore:mooBlocks})[method](D);return[fromBlocks(D,blk),log]}
+function explain(D,t){const tp=trap(D),nm=s=>D.pre+s,ch=Array.from(t);let cur=D.start,v=null;
+const st=[{s:cur,f:null,x:`Start in ${nm(cur)}${D.acc.has(cur)?' (accepting)':''}.`}];
+for(let i=0;i<ch.length;i++){const c=ch[i],y=sym(D,c);
+if(y===null){st.push({s:cur,f:null,x:`Read '${sh(c)}' (${i+1}/${ch.length}): it is not in the automaton's alphabet, so no transition exists. REJECTED.`});v=false;break}
+const nx=D.tr[cur][y];st.push({s:nx,f:cur,x:`Read '${sh(c)}' (${i+1}/${ch.length}): ${nm(cur)} → ${nm(nx)}.`});cur=nx;
+if(tp.has(cur)){st[st.length-1].x+=` ${nm(cur)} is a trap state: no accepting state can be reached from it. REJECTED.`;v=false;break}}
+if(v===null){v=D.acc.has(cur);st.push({s:cur,f:null,x:`End of input. Input ended in ${v?'accepting':'non-accepting'} state ${nm(cur)}. ${v?'ACCEPTED':'REJECTED'}.`})}
+return{ok:v,tr:st}}
+function gen(M,cnt,mx){const n=M.tr.length,rev=Array.from({length:n},()=>[]);
+M.tr.forEach((r,s)=>Object.values(r).forEach(t=>rev[t].push(s)));
+const dist={},q=[...M.acc];q.forEach(s=>dist[s]=0);
+for(let i=0;i<q.length;i++)for(const p of rev[q[i]])if(dist[p]===undefined){dist[p]=dist[q[i]]+1;q.push(p)}
+if(dist[M.start]===undefined)return[];mx=Math.max(mx,dist[M.start]);
+const spare=[...'xyzqkj~#%&@'].filter(c=>!M.al.includes(c));if(!spare.length)spare.push('§');
+const R=a=>a[Math.floor(Math.random()*a.length)],out=[],seen=new Set();
+for(let tries=0;out.length<cnt&&tries<cnt*60+100;tries++){let s=M.start,w='',l=0;
+for(;;){const rem=mx-l;if(M.acc.has(s)&&(rem<=0||Math.random()<.3))break;
+const o=Object.entries(M.tr[s]).filter(([a,t])=>dist[t]!==undefined&&dist[t]<=rem-1);if(!o.length)break;
+const[a,t]=R(o);w+=a===OTHER?R(spare):a;l++;s=t}
+if(M.acc.has(s)&&!seen.has(w)){seen.add(w);out.push(w)}}
+return out}
+function build(rx){const tk=tokenize(rx),ast=parseTokens(tk),N=nfa(ast),D=dfa(N),mins={};for(const m in METHODS)mins[m]=minim(D,m);return{tk,ast,N,D,mins}}
+function tblN(N){const cols=[];N.tr.forEach(e=>e.forEach(([l])=>{if(l&&!cols.includes(l.label))cols.push(l.label)}));cols.push('ε');
+return{x:'',cols,rows:N.tr.map((e,s)=>({n:'q'+s,st:s===N.start,ac:s===N.accept,tp:false,ex:'',c:cols.map(c=>{const t=srt(new Set(e.filter(([l])=>(l?l.label:'ε')===c).map(x=>x[1])));return t.map(x=>'q'+x).join(',')||'–'})}))}}
+function tblD(D){const tp=trap(D);return{x:D.pre==='D'?'NFA states':'merged DFA states',cols:D.al.map(a=>a===OTHER?'other':sh(a)),
+rows:D.tr.map((r,s)=>({n:D.pre+s,st:s===D.start,ac:D.acc.has(s),tp:tp.has(s),ex:D.mem[s].length?'{'+D.mem[s].map(m=>D.mp+m).join(', ')+'}':'∅',c:D.al.map(a=>D.pre+r[a])}))}}
+const EXPORT_STY='<style>.edge path{fill:none;stroke:#64748b;stroke-width:1.5}.edge .ar{fill:#64748b}.edge text{font:12px ui-monospace,Menlo,Consolas,monospace;fill:#0f172a;text-anchor:middle}.edge text.h{fill:#fff;stroke:#fff;stroke-width:5px;stroke-linejoin:round}.node circle{fill:#fff;stroke:#1e293b;stroke-width:1.6}.node .in{fill:none}.node text{font:600 13px system-ui,Arial,sans-serif;fill:#0f172a;text-anchor:middle}.st .ar{fill:#1e293b}.st line{stroke:#1e293b;stroke-width:1.5}.edge.active path{stroke:#d97706;stroke-width:3}.edge.active .ar{fill:#d97706}.node.active circle{fill:#fde68a;stroke:#d97706;stroke-width:2.6}.node.ok circle{fill:#bbf7d0;stroke:#15803d;stroke-width:2.6}.node.bad circle{fill:#fecaca;stroke:#b91c1c;stroke-width:2.6}</style>';
+const esx=s=>s.replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function compact(syms,al){const S=new Set(syms);if(al.length>2&&S.size===al.length)return'Σ';
+const ch=[...S].filter(c=>c!==OTHER).sort(),o=[];let i=0;
+while(i<ch.length){let j=i;while(j+1<ch.length&&ch[j+1].charCodeAt(0)===ch[j].charCodeAt(0)+1)j++;
+if(j-i>=2)o.push(sh(ch[i])+'-'+sh(ch[j]));else for(let k=i;k<=j;k++)o.push(sh(ch[k]));i=j+1}
+if(S.has(OTHER))o.push('other');return o.join(',')}
+function gN(N){const e={};N.tr.forEach((l,u)=>l.forEach(([c,v])=>{(e[u+'-'+v]=e[u+'-'+v]||[]).push(c?c.label:'ε')}));
+for(const k in e)e[k]=[...new Set(e[k])].join(', ');
+return{nodes:N.tr.map((_,i)=>i),edges:e,start:N.start,acc:new Set([N.accept]),name:s=>'q'+s}}
+function gD(D){const h=new Set(trap(D));h.delete(D.start);const g={},nodes=[];
+D.tr.forEach((r,s)=>{if(h.has(s))return;nodes.push(s);for(const a in r){const t=r[a];if(!h.has(t))(g[s+'-'+t]=g[s+'-'+t]||[]).push(a)}});
+for(const k in g)g[k]=compact(g[k],D.al);
+return{nodes,edges:g,start:D.start,acc:new Set([...D.acc].filter(s=>!h.has(s))),name:s=>D.pre+s}}
+const un=(x,y)=>{const l=Math.hypot(x,y)||1;return[x/l,y/l]};
+function arrow(tx,ty,dx,dy){const bx=tx-dx*9,by=ty-dy*9,px=-dy*4.5,py=dx*4.5;
+return[`<polygon class="ar" points="${tx.toFixed(1)},${ty.toFixed(1)} ${(bx+px).toFixed(1)},${(by+py).toFixed(1)} ${(bx-px).toFixed(1)},${(by-py).toFixed(1)}"/>`,bx,by]}
+const lab=(x,y,t)=>`<text class="h" x="${x.toFixed(1)}" y="${y.toFixed(1)}">${esx(t)}</text><text x="${x.toFixed(1)}" y="${y.toFixed(1)}">${esx(t)}</text>`;
+function render(g,kind){const R=22,DX=125,DY=90,P=80,{nodes,edges,start,acc,name}=g;
+const E=Object.entries(edges).map(([k,l])=>{const[u,v]=k.split('-').map(Number);return{u,v,l}}).sort((a,b)=>a.u-b.u||a.v-b.v);
+const adj={};nodes.forEach(n=>adj[n]=[]);E.forEach(e=>adj[e.u].push(e.v));
+const ly={[start]:0},q=[start];for(let i=0;i<q.length;i++)for(const v of adj[q[i]])if(ly[v]===undefined){ly[v]=ly[q[i]]+1;q.push(v)}
+const ex=Math.max(...Object.values(ly))+1;nodes.forEach(n=>{if(ly[n]===undefined)ly[n]=ex});
+const L={};[...nodes].sort((a,b)=>ly[a]-ly[b]||a-b).forEach(n=>(L[ly[n]]=L[ly[n]]||[]).push(n));
+const nl=Math.max(...Object.keys(L).map(Number))+1,mh=Math.max(...Object.values(L).map(a=>a.length)),x0=P+30,W=x0+(nl-1)*DX+P,H=2*P+(mh-1)*DY,pos={};
+Object.entries(L).forEach(([li,a])=>{const top=P+(mh-a.length)*DY/2;a.forEach((n,i)=>pos[n]=[x0+li*DX,top+i*DY])});
+const out=[`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">`];
+for(const{u,v,l}of E){const id=`${kind}-e${u}-${v}`,[x1,y1]=pos[u],[x2,y2]=pos[v];
+if(u===v){const tx=x1+10,ty=y1-19.6,c2x=x1+30,c2y=y1-R-36,d=un(tx-c2x,ty-c2y),[ar,bx,by]=arrow(tx,ty,d[0],d[1]);
+out.push(`<g class="edge" id="${id}"><path d="M ${x1-10} ${(y1-19.6).toFixed(1)} C ${x1-30} ${y1-R-36} ${c2x} ${c2y} ${bx.toFixed(1)} ${by.toFixed(1)}"/>${ar}${lab(x1,y1-R-44,l)}</g>`);continue}
+const dx=x2-x1,dy=y2-y1,Ln=Math.hypot(dx,dy)||1,nx=-dy/Ln,ny=dx/Ln,ld=ly[v]-ly[u],rev=(v+'-'+u) in edges;
+let off=rev?52:ld===1?0:(dx>=0?-1:1)*(44+22*Math.max(0,Math.abs(ld)-1));
+const cx=(x1+x2)/2+nx*off,cy=(y1+y2)/2+ny*off,[ux,uy]=un(cx-x1,cy-y1),sx=x1+ux*R,sy=y1+uy*R,[vx,vy]=un(cx-x2,cy-y2),tx=x2+vx*R,ty=y2+vy*R,[ar,bx,by]=arrow(tx,ty,-vx,-vy);
+let lx=.25*sx+.5*cx+.25*tx,ly2=.25*sy+.5*cy+.25*ty;
+if(off===0)ly2-=9;else{const sg=off>0?1:-1;lx+=nx*sg*11;ly2+=ny*sg*11+4}
+out.push(`<g class="edge" id="${id}"><path d="M ${sx.toFixed(1)} ${sy.toFixed(1)} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${bx.toFixed(1)} ${by.toFixed(1)}"/>${ar}${lab(lx,ly2,l)}</g>`)}
+const[sx,sy]=pos[start],[sar,sbx]=arrow(sx-R,sy,1,0);
+out.push(`<g class="st"><line x1="${sx-R-36}" y1="${sy}" x2="${sbx.toFixed(1)}" y2="${sy}"/>${sar}</g>`);
+for(const n of nodes){const[x,y]=pos[n];
+out.push(`<g class="node" id="${kind}-n${n}"><circle cx="${x}" cy="${y}" r="${R}"/>${acc.has(n)?`<circle class="in" cx="${x}" cy="${y}" r="${R-4}"/>`:''}<text x="${x}" y="${y+4.5}">${esx(name(n))}</text></g>`)}
+return out.join('')+'</svg>'}
+const $=id=>document.getElementById(id);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const disp=s=>s===''?'ε':s.replace(/ /g,'␣');
+const PRE=[["Ends in abb","(a|b)*abb","abb\naabb\nabab\nbabb"],["a, then b or c, then d","a(b|c)*d","ad\nabcbd\nabc\nacd"],["Binary ending in 00","(0|1)*00","100\n0\n1100\n101\nε"],["Decimal number","\\d+(\\.\\d+)?","3.14\n42\n.5\n7."],["Simple email","[a-z]+@[a-z]+\\.com","me@site.com\nme@site.org\n@x.com"],["ab repeats, or one c","(ab)+|c?","ab\nabab\nc\nε\naba"]];
+const CMP=[["(a|b)*","(a*b*)*"],["a+","aa*"],["(ab)*a","a(ba)*"],["a(a|b)*","(a|b)*a"],["(a|b)*","a*|b*"]];
+const ENT={nfa:{name:'NFA',c:'var(--s1)'},dfa:{name:'DFA',c:'var(--s2)'},min:{name:'Minimal DFA',c:'var(--s3)'}};
+const VIEWS={tester:'v-tester',dashboard:'v-dash',compare:'v-compare',about:'v-about'};
+let S=null,algo='hopcroft',tab='dfa',sel=0,step=0,zoom=1,timer=null,gens=[],cur='tester',bench=null,benchBusy=false,lib=null,cmpInit=false,hero=null;
+const noMotion=()=>!!(window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+const nEdges=N=>{let eps=0,all=0;N.tr.forEach(e=>e.forEach(([l])=>{all++;if(l===null)eps++}));return{eps,all,sym:all-eps}};
+const err=m=>{const e=$('err');e.textContent=m;e.hidden=!m};
+const mk=(id,c)=>{const e=document.getElementById(id);if(e)e.classList.add(c)};
+const plural=(n,w)=>n+' '+w+(n===1?'':'s');
+
+/* ---------- tooltip (one element, mouse and keyboard) ---------- */
+const tip=$('tip');
+function showTip(e,el){const[v,l]=el.dataset.tip.split('\n');tip.textContent='';
+const a=document.createElement('strong');a.textContent=v;const b=document.createElement('span');b.textContent=l||'';tip.append(a,b);tip.hidden=false;
+const r=el.getBoundingClientRect(),byPointer=e&&e.type==='pointermove',x=byPointer?e.clientX:r.left+r.width/2,y=byPointer?e.clientY:r.top;
+const w=tip.offsetWidth,h=tip.offsetHeight;tip.style.left=Math.max(8,Math.min(innerWidth-w-8,x-w/2))+'px';tip.style.top=(y-h-12<8?y+18:y-h-12)+'px'}
+document.addEventListener('pointermove',e=>{const el=e.target.closest&&e.target.closest('[data-tip]');if(el)showTip(e,el);else tip.hidden=true});
+document.addEventListener('focusin',e=>{const el=e.target.closest&&e.target.closest('[data-tip]');if(el)showTip(e,el)});
+document.addEventListener('focusout',()=>{tip.hidden=true});
+addEventListener('scroll',()=>{tip.hidden=true},{passive:true});
+
+/* ---------- views ---------- */
+function show(v,quiet){if(!VIEWS[v])v='tester';cur=v;
+Object.entries(VIEWS).forEach(([k,id])=>{$(id).hidden=k!==v});
+document.querySelectorAll('#nav [data-v]').forEach(b=>b.setAttribute('aria-selected',b.dataset.v===v));
+try{history.replaceState(null,'','#'+v)}catch(e){}
+if(v==='dashboard')renderDash();if(v==='compare')initCompare();
+if(!quiet){try{window.scrollTo(0,0)}catch(e){}}}
+$('nav').onclick=e=>{const b=e.target.closest('[data-v]');if(b)show(b.dataset.v)};
+$('dOpen').onclick=()=>show('tester');
+
+/* ---------- tester ---------- */
+PRE.forEach(([n,r,t])=>{const b=document.createElement('button');b.type='button';b.className='chip';b.textContent=n;b.title=r;b.onclick=()=>{$('rx').value=r;$('ts').value=t;run()};$('pre').appendChild(b)});
+function run(){err('');stopP();const rx=$('rx').value,
+tests=$('ts').value.split('\n').map(s=>s.replace(/\r$/,'')).filter(s=>s.length).map(s=>s==='ε'?'':s.slice(0,500)).slice(0,60);
+try{const b=build(rx),[M,rounds]=b.mins[algo];
+S={...b,M,rounds,rx,svg:{nfa:render(gN(b.N),'nfa'),dfa:render(gD(b.D),'dfa'),min:render(gD(M),'min')},
+tests:tests.map(t=>{const[ok,nt]=nsim(b.N,t);return{inp:t,ok,nt,dfa:explain(b.D,t),min:explain(M,t)}})};
+bench=null;sel=0;step=0;all();if(cur==='dashboard')renderDash()}
+catch(e){err(e.pos!==undefined?`${e.message}. Check the expression near character ${e.pos+1}.`:e.message)}}
+function all(){
+$('n-nfa').textContent=S.N.tr.length;$('n-dfa').textContent=S.D.tr.length;$('n-min').textContent=S.M.tr.length;
+$('ntr').textContent=nEdges(S.N).all;
+$('sig').textContent='{'+S.D.al.map(a=>a===OTHER?'other':sh(a)).join(', ')+'}';
+rounds();
+$('toks').innerHTML=S.tk.length?S.tk.map(t=>`<span class="tok"><i>${t.k}</i>${esc(t.x)}</span>`).join(''):'<span class="hint">The expression is empty, so there are no tokens.</span>';
+$('astPre').textContent=astText(S.ast);
+tests();drawView(true)}
+function rounds(){
+$('minSub').textContent=({hopcroft:'Hopcroft',table:'Table-filling',moore:'Partition refinement'})[algo];
+document.querySelectorAll('.algoSeg [data-a]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.a===algo));
+$('rounds').innerHTML=S.rounds.map(g=>`<div class="rd"><span class="rd-l">${esc(g.label)}</span><div class="rd-g">${g.groups.map(x=>`<span class="grp">{${x.join(', ')}}</span>`).join('')}</div></div>`).join('')+`<p class="hint" style="margin-top:8px">${METHODS[algo]}. States that can never be told apart end up in one group, and each final group becomes one state of the minimal DFA.</p>`;
+$('agree').textContent='All three algorithms agree. '+Object.keys(METHODS).map(m=>METHODS[m]+': '+S.mins[m][0].tr.length).join(' · ')+' states.'}
+function setAlgo(a){algo=a;stopP();const[M,r]=S.mins[a];S.M=M;S.rounds=r;S.svg.min=render(gD(M),'min');S.tests.forEach(t=>t.min=explain(M,t.inp));step=0;rounds();
+if(tab==='min')drawView(true);else hl();if(cur==='dashboard')renderDash()}
+document.addEventListener('click',e=>{const b=e.target.closest('.algoSeg [data-a]');if(b&&S)setAlgo(b.dataset.a)});
+function tests(){const b=$('tl');if(!S.tests.length){b.innerHTML='<span class="hint">Add test strings to see accept and reject results.</span>';return}
+b.innerHTML='';S.tests.forEach((t,i)=>{const x=document.createElement('button');x.type='button';x.className='test'+(i===sel?' sel':'');
+x.innerHTML=`<span class="badge ${t.ok?'ok':'bad'}">${t.ok?'ACCEPT':'REJECT'}</span><span></span>`;x.lastChild.textContent=disp(t.inp);
+x.onclick=()=>{sel=i;step=0;stopP();tests();hl()};b.appendChild(x)})}
+const tlen=()=>!S.tests.length?0:tab==='nfa'?S.tests[sel].nt.length:S.tests[sel][tab].tr.length;
+function drawView(fit){document.querySelectorAll('#pipe .stage').forEach(b=>b.setAttribute('aria-selected',b.dataset.t===tab));
+$('dg').innerHTML=S.svg[tab];const v=$('dg').querySelector('svg').viewBox.baseVal;
+if(fit)zoom=Math.max(.55,Math.min(1,($('dg').clientWidth-4)/v.width));zm();
+const t=tab==='nfa'?tblN(S.N):tblD(tab==='dfa'?S.D:S.M);
+let h='<table><thead><tr><th>State</th>'+(t.x?`<th>${t.x}</th>`:'')+t.cols.map(c=>`<th>${esc(c)}</th>`).join('')+'</tr></thead><tbody>';
+t.rows.forEach(r=>{h+=`<tr class="${r.tp?'trap':''}"><td>${r.st?'→ ':''}${r.ac?'* ':''}${r.n}</td>${t.x?`<td>${r.ex}</td>`:''}${r.c.map(c=>`<td>${c}</td>`).join('')}</tr>`});
+$('tb').innerHTML=h+'</tbody></table>';
+$('tt').textContent={nfa:'NFA',dfa:'DFA',min:'Minimal DFA'}[tab]+' transition table  (→ start, * accepting)';hl()}
+function zm(){const s=$('dg').querySelector('svg'),v=s.viewBox.baseVal;s.style.width=v.width*zoom+'px';s.style.height=v.height*zoom+'px'}
+function drawTape(t,stp,last,failIdx){const ch=Array.from(t.inp),box=$('tape');
+if(!ch.length)box.innerHTML='<span class="cell cur" title="empty string">ε</span>';
+else box.innerHTML=ch.map((c,i)=>`<span class="cell ${i===failIdx?'fail':i<stp?'done':i===stp&&!last?'cur':''}">${esc(c===' '?'␣':c)}</span>`).join('');
+box.className='tape'+(last&&t.ok?' ok':'')}
+function hl(){document.querySelectorAll('#dg .active,#dg .ok,#dg .bad').forEach(e=>e.classList.remove('active','ok','bad'));
+const nr=$('nr'),vd=$('vd');nr.className='narr';vd.className='vd';const n=tlen();
+if(!n){nr.textContent='Add a test string to step through how the automaton reads it.';$('sp').hidden=true;$('tape').innerHTML='';vd.textContent='NO INPUT';return}
+$('sp').hidden=false;step=Math.max(0,Math.min(step,n-1));
+const t=S.tests[sel],last=step===n-1,cl=t.ok?'ok':'bad',len=Array.from(t.inp).length;let fail=-1;
+if(tab==='nfa'){const c=t.nt[step],set='{'+c.s.map(s=>'q'+s).join(', ')+'}';c.s.forEach(s=>mk('nfa-n'+s,last?cl:'active'));
+let x=step===0?`Start: the ε-closure of q0 is ${set}.`:`Read '${sh(c.c)}' (${step}/${len}): active states are now ${c.s.length?set:'none'}.`;
+if(last)x+=t.ok?' The accept state is active: ACCEPTED.':c.s.length?' The accept state is not active: REJECTED.':' No states are left: REJECTED.';
+nr.textContent=x;if(last&&!t.ok&&!c.s.length&&step>0)fail=step-1}
+else{const c=t[tab].tr[step];mk(`${tab}-n${c.s}`,last?cl:'active');if(c.f!==null)mk(`${tab}-e${c.f}-${c.s}`,'active');nr.textContent=c.x;
+if(last&&!t.ok&&step>0&&step<=len)fail=step-1}
+if(last)nr.classList.add(cl);
+drawTape(t,Math.min(step,len),last,fail);
+vd.textContent=last?(t.ok?'ACCEPTED':'REJECTED'):'READING';if(last)vd.classList.add(cl);
+$('sl').textContent=`Step ${step+1} of ${n}`;$('pv').disabled=step===0;$('nx').disabled=last}
+function stopP(){if(timer){clearInterval(timer);timer=null;$('pl').textContent='Play'}}
+$('pl').onclick=()=>{if(timer)return stopP();if(step>=tlen()-1)step=0;$('pl').textContent='Pause';hl();timer=setInterval(()=>{if(step>=tlen()-1)return stopP();step++;hl()},900)};
+$('pv').onclick=()=>{stopP();step--;hl()};$('nx').onclick=()=>{stopP();step++;hl()};
+$('pipe').onclick=e=>{const b=e.target.closest('[data-t]');if(!b)return;tab=b.dataset.t;stopP();drawView(true)};
+$('zi').onclick=()=>{zoom=Math.min(3,zoom*1.25);zm()};$('zo').onclick=()=>{zoom=Math.max(.3,zoom/1.25);zm()};
+$('go').onclick=run;$('rerun').onclick=run;$('rx').addEventListener('keydown',e=>{if(e.key==='Enter')run()});
+$('ts').addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();run()}});
+$('gen').onclick=()=>{const o=$('genOut');o.innerHTML='';try{const M=S?S.M:build($('rx').value).M;
+gens=gen(M,Math.max(1,Math.min(50,+$('gc').value||10)),Math.max(0,Math.min(60,+$('gl').value||0)));
+gens.forEach(s=>{const c=document.createElement('code');c.textContent=disp(s);o.appendChild(c)});$('use').hidden=!gens.length}catch(e){o.textContent=e.message}};
+$('use').onclick=()=>{$('ts').value=gens.map(s=>s===''?'ε':s).join('\n');run()};
+
+/* ---------- export ---------- */
+function svgText(){const s=$('dg').querySelector('svg').cloneNode(true);
+s.querySelectorAll('.active,.ok,.bad').forEach(e=>e.classList.remove('active','ok','bad'));s.removeAttribute('style');
+const vb=s.viewBox.baseVal;s.setAttribute('width',vb.width);s.setAttribute('height',vb.height);
+s.insertAdjacentHTML('afterbegin',EXPORT_STY+`<rect width="${vb.width}" height="${vb.height}" fill="#fff"/>`);
+return{xml:new XMLSerializer().serializeToString(s),w:vb.width,h:vb.height}}
+const fileBase=()=>({nfa:'nfa',dfa:'dfa',min:'minimal_dfa'})[tab];
+const flash=(b,t)=>{const o=b.dataset.l||(b.dataset.l=b.textContent);b.textContent=t;setTimeout(()=>b.textContent=o,1800)};
+function saveBlob(blob,name){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),3000)}
+$('svgBtn').onclick=()=>{saveBlob(new Blob([svgText().xml],{type:'image/svg+xml'}),fileBase()+'.svg');flash($('svgBtn'),'Saving…')};
+$('pngBtn').onclick=()=>{const{xml,w,h}=svgText(),img=new Image(),b=$('pngBtn');
+img.onload=()=>{const c=document.createElement('canvas');c.width=w*2;c.height=h*2;const x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0,c.width,c.height);
+c.toBlob(bl=>{if(bl){saveBlob(bl,fileBase()+'.png');flash(b,'Saving…')}else flash(b,'PNG failed')},'image/png')};
+img.onerror=()=>flash(b,'PNG failed');
+img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(xml)};
+$('cp').onclick=async()=>{const b=$('cp');try{await navigator.clipboard.writeText(svgText().xml);flash(b,'Copied')}catch(e){flash(b,'Copy blocked here')}};
+
+/* ---------- hero: a live machine ---------- */
+function heroInit(){const M=build('(a|b)*abb').mins.hopcroft[0];$('heroDg').innerHTML=render(gD(M),'hero');
+const tr=explain(M,'aabb').tr;hero={tr,word:Array.from('aabb'),i:noMotion()?tr.length-1:0};heroDraw();
+if(!noMotion())hero.t=setInterval(()=>{hero.i=(hero.i+1)%(hero.tr.length+2);heroDraw()},1100)}
+function heroDraw(){const{tr,word,i}=hero,k=Math.min(i,tr.length-1),last=i>=tr.length-1;
+document.querySelectorAll('#heroDg .active,#heroDg .ok').forEach(e=>e.classList.remove('active','ok'));
+const c=tr[k];mk(`hero-n${c.s}`,last?'ok':'active');if(c.f!==null&&!last)mk(`hero-e${c.f}-${c.s}`,'active');
+$('hTape').innerHTML=word.map((ch,j)=>`<span class="cell ${j<k?'done':j===k&&!last?'cur':''}">${esc(ch)}</span>`).join('');
+$('hTape').className='tape'+(last?' ok':'');const v=$('hVd');v.className='vd'+(last?' ok':'');v.textContent=last?'ACCEPTED':'READING'}
+
+/* ---------- dashboard ---------- */
+function tableHTML(t){return'<div class="scroll"><table><thead><tr>'+t.cols.map(c=>`<th>${esc(c)}</th>`).join('')+'</tr></thead><tbody>'+t.rows.map(r=>'<tr>'+r.map(c=>`<td>${esc(c)}</td>`).join('')+'</tr>').join('')+'</tbody></table></div>'}
+function setCard(id,html,tbl){const c=$(id);c.querySelector('.cv').innerHTML=html;c.querySelector('.tv').innerHTML=tbl?tableHTML(tbl):'<div class="empty">No data to show.</div>'}
+document.addEventListener('click',e=>{const b=e.target.closest('.vt button');if(!b)return;const c=b.closest('.card'),t=b.dataset.cv==='t';
+c.classList.toggle('as-table',t);c.querySelectorAll('.vt button').forEach(x=>x.setAttribute('aria-pressed',x===b));if(!t)renderDash()});
+function renderDash(){if(!S)return;$('dRx').textContent=S.rx||'(empty expression)';kpis();cSize();cProg();cTests();cLib();cBench()}
+const kp=(l,v,s)=>`<div class="k-l">${l}</div><div class="k-v">${v}</div><div class="k-s">${s}</div>`;
+function kpis(){const e=nEdges(S.N),nn=S.N.tr.length,dn=S.D.tr.length,mn=S.M.tr.length,al=S.D.al.length,pct=nn?Math.round((1-mn/nn)*100):0,tp=trap(S.M).size;
+$('kHero').innerHTML=`<div class="k-l">Minimal DFA</div><div class="k-big">${mn}<small>${mn===1?'state':'states'}</small></div><div class="k-d">${pct>0?pct+'% smaller than the NFA':'Same size as the NFA'}</div><div class="k-s">${nn} NFA states became ${dn} DFA states, then ${mn}. ${S.M.acc.size} accepting${tp?', '+tp+' trap':''}.</div>`;
+$('k1').innerHTML=kp('NFA states',nn,`${e.all} transitions`);
+$('k2').innerHTML=kp('DFA states',dn,dn>mn?`${dn-mn} merged by minimization`:'Already minimal');
+$('k3').innerHTML=kp('ε-transitions',e.eps,e.all?`${Math.round(e.eps/e.all*100)}% of NFA transitions`:'None');
+$('k4').innerHTML=kp('Alphabet size',al,esc(S.D.al.slice(0,6).map(a=>a===OTHER?'other':sh(a)).join(', ')+(al>6?', …':''))||'Empty')}
+function cSize(){const e=nEdges(S.N),al=S.D.al.length,
+rows=[{k:'nfa',v:S.N.tr.length,t:e.all},{k:'dfa',v:S.D.tr.length,t:S.D.tr.length*al},{k:'min',v:S.M.tr.length,t:S.M.tr.length*al}],mx=Math.max(...rows.map(r=>r.v),1);
+const pct=Math.round((1-rows[2].v/rows[0].v)*100);
+const html=rows.map(r=>`<div class="hb-row"><span class="hb-l"><span class="dots" style="background:${ENT[r.k].c}"></span>${ENT[r.k].name}</span><div class="hb-t"><div class="hb-b" tabindex="0" style="width:${(r.v/mx*78).toFixed(1)}%;background:${ENT[r.k].c}" data-tip="${plural(r.v,'state')}\n${ENT[r.k].name} · ${plural(r.t,'transition')}"></div><span class="hb-v">${r.v}</span></div></div>`).join('')
++`<div class="hb-note">${pct>0?`Minimization removes ${pct}% of the NFA's states.`:'The minimal DFA is the same size as the NFA.'} The DFA has a transition for every symbol, so its transition count is states × ${al}.</div>`;
+setCard('cSize',html,{cols:['Stage','States','Transitions'],rows:rows.map(r=>[ENT[r.k].name,r.v,r.t])})}
+function cProg(){const el=$('cProg').querySelector('.cv');$('cProgSub').textContent=`${METHODS[algo]}. Groups of states after each step.`;
+const pts=S.rounds.map((r,i)=>({i,n:r.groups.length,l:r.label}));
+const W=Math.max(240,Math.floor(el.clientWidth||520)),H=214,L=34,R=34,T=24,B=40,mx=Math.max(...pts.map(p=>p.n),2);
+const xs=i=>pts.length===1?L+(W-L-R)/2:L+(W-L-R)*i/(pts.length-1),ys=v=>T+(H-T-B)*(1-v/mx);
+const tk=[...new Set([0,Math.round(mx/2),mx])];
+let g=tk.map(t=>`<line class="gl" x1="${L}" x2="${W-R}" y1="${ys(t)}" y2="${ys(t)}"/><text class="ax" x="${L-8}" y="${ys(t)+4}" text-anchor="end">${t}</text>`).join('');
+const every=Math.ceil(pts.length/Math.max(2,Math.floor((W-L-R)/48)));
+g+=pts.map(p=>p.i%every===0||p.i===pts.length-1?`<text class="ax" x="${xs(p.i)}" y="${H-B+18}" text-anchor="middle">${p.i}</text>`:'').join('');
+g+=`<text class="axt" x="${(L+W-R)/2}" y="${H-6}" text-anchor="middle">Step</text>`;
+const line=pts.map((p,i)=>`${i?'L':'M'}${xs(p.i).toFixed(1)} ${ys(p.n).toFixed(1)}`).join(' ');
+const area=pts.length>1?`<path d="${line} L${xs(pts[pts.length-1].i).toFixed(1)} ${ys(0)} L${xs(0).toFixed(1)} ${ys(0)} Z" fill="var(--s3)" opacity=".1"/>`:'';
+const dots=pts.map(p=>`<circle cx="${xs(p.i).toFixed(1)}" cy="${ys(p.n).toFixed(1)}" r="4.5" fill="var(--s3)" stroke="var(--surface)" stroke-width="2"/><circle cx="${xs(p.i).toFixed(1)}" cy="${ys(p.n).toFixed(1)}" r="13" fill="transparent" tabindex="0" data-tip="${plural(p.n,'group')}\n${esc(p.l)}"/>`).join('');
+const last=pts[pts.length-1],lab=`<text class="lv" x="${xs(last.i).toFixed(1)}" y="${(ys(last.n)-12).toFixed(1)}" text-anchor="end">${plural(last.n,'group')}</text>`;
+const svg=`<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="Groups of states after each ${esc(METHODS[algo])} step, ending at ${last.n}">${g}${area}<path d="${line}" fill="none" stroke="var(--s3)" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>${dots}${lab}</svg>`;
+const sizes=Object.keys(METHODS).map(m=>`${METHODS[m]} ${S.mins[m][1].length-1}`).join(' · ');
+setCard('cProg',svg+`<div class="hb-note">Steps to finish: ${sizes}. All three end with ${plural(S.M.tr.length,'state')}.</div>`,{cols:['Step','Label','Groups'],rows:pts.map(p=>[p.i,p.l,p.n])});
+$('cProg').querySelector('.cv').classList.add('lc')}
+function readCount(M,str){let s=M.start,k=0;const tp=trap(M);for(const ch of Array.from(str)){const y=sym(M,ch);if(y===null)break;s=M.tr[s][y];k++;if(tp.has(s))break}return k}
+function cTests(){const T=S.tests;
+if(!T.length)return setCard('cTests','<div class="empty">Add test strings in the tester to see how the machine decides each one.</div>',null);
+const acc=T.filter(t=>t.ok).length,rej=T.length-acc;
+const seg=`<div class="sbar" role="img" aria-label="${acc} accepted, ${rej} rejected">${acc?`<b style="flex:${acc};background:var(--good)" data-tip="${acc} accepted\n${Math.round(acc/T.length*100)}% of ${T.length}"></b>`:''}${rej?`<b style="flex:${rej};background:var(--crit)" data-tip="${rej} rejected\n${Math.round(rej/T.length*100)}% of ${T.length}"></b>`:''}</div>
+<div class="legend"><span><i style="background:var(--good)"></i>✓ Accepted ${acc}</span><span><i style="background:var(--crit)"></i>✗ Rejected ${rej}</span></div>`;
+const info=T.map(t=>{const len=Array.from(t.inp).length,rd=readCount(S.M,t.inp);return{t,len,rd}});
+const rows=info.slice(0,12).map(({t,len,rd})=>{const p=len?rd/len:1,c=t.ok?'var(--good)':'var(--crit)';
+return`<div class="trow"><span class="ic ${t.ok?'ok':'bad'}" aria-label="${t.ok?'Accepted':'Rejected'}">${t.ok?'✓':'✗'}</span><code title="${esc(disp(t.inp))}">${esc(disp(t.inp))}</code><div class="hb-t"><div class="hb-b" tabindex="0" style="width:${Math.max(p*100,1.5).toFixed(1)}%;background:${c}" data-tip="${rd} of ${len} symbols read\n${t.ok?'Accepted':'Rejected'}: ${esc(disp(t.inp))}"></div></div><span class="t-r">${rd} of ${len}</span></div>`}).join('');
+const more=info.length>12?`<div class="hb-note">Showing 12 of ${info.length} strings. The table lists them all.</div>`:'';
+setCard('cTests',seg+`<div>${rows}</div>`+more,{cols:['String','Verdict','Symbols read','Length'],rows:info.map(({t,len,rd})=>[disp(t.inp),t.ok?'Accepted':'Rejected',rd,len])})}
+function cLib(){if(!lib)lib=PRE.map(([n,r,t])=>{const b=build(r);return{n,r,t,nfa:b.N.tr.length,dfa:b.D.tr.length,min:b.mins.hopcroft[0].tr.length}});
+const mx=Math.max(...lib.flatMap(x=>[x.nfa,x.dfa,x.min]));
+const bar=(v,k,n,showVal)=>`<div class="hb-t"><div class="hb-b" style="width:${(v/mx*80).toFixed(1)}%;background:${ENT[k].c}" data-tip="${plural(v,'state')}\n${ENT[k].name} · ${esc(n)}"></div>${showVal?`<span class="hb-v">${v}</span>`:''}</div>`;
+const html=`<div class="legend">${['nfa','dfa','min'].map(k=>`<span><i style="background:${ENT[k].c}"></i>${ENT[k].name}</span>`).join('')}</div><div class="lib">`+lib.map((x,i)=>`<button class="lib-row" type="button" data-lib="${i}" data-tip="NFA ${x.nfa} · DFA ${x.dfa} · Minimal ${x.min}\n${esc(x.n)}"><span class="lib-n"><b>${esc(x.n)}</b><code>${esc(x.r)}</code></span><span class="lib-b">${bar(x.nfa,'nfa',x.n)}${bar(x.dfa,'dfa',x.n)}${bar(x.min,'min',x.n,true)}</span></button>`).join('')+'</div>';
+setCard('cLib',html,{cols:['Example','Expression','NFA','DFA','Minimal DFA'],rows:lib.map(x=>[x.n,x.r,x.nfa,x.dfa,x.min])})}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-lib]');if(!b||!lib)return;const x=lib[+b.dataset.lib];$('rx').value=x.r;$('ts').value=x.t;run();show('tester')});
+function cBench(){if(!bench){setCard('cBench','<div class="empty">Measuring…</div>',null);setTimeout(runBench,40);return}drawBench()}
+function runBench(){if(benchBusy||!S||bench)return;benchBusy=true;
+const rx=S.rx,N=S.N,D=S.D,M=S.M,words=gen(M,60,300).filter(w=>w.length);
+if(!words.length){bench={rx,small:true};benchBusy=false;return drawBench()}
+const list=[];let total=0;while(total<10000&&list.length<10000){const w=words[list.length%words.length];list.push(w);total+=w.length}
+const ch=list.map(w=>Array.from(w)),sd=ch.map(a=>a.map(c=>sym(D,c))),sm=ch.map(a=>a.map(c=>sym(M,c)));
+const nfaRun=()=>{let n=0;for(const a of ch){let c=clo(N,[N.start]);for(const x of a)c=clo(N,mv(N,c,x));n+=c.size}return n};
+const dRun=(m,sy)=>()=>{let n=0;for(const a of sy){let s=m.start;for(const y of a)s=m.tr[s][y];n+=s}return n};
+const time=fn=>{fn();const ts=[];for(let k=0;k<3;k++){let it=0,t=0;const t0=performance.now();do{fn();it++;t=performance.now()-t0}while(t<25);ts.push(t/it);if(t>80)break}ts.sort((a,b)=>a-b);return ts[Math.floor(ts.length/2)]};
+const res={nfa:time(nfaRun),dfa:time(dRun(D,sd)),min:time(dRun(M,sm))};
+total=ch.reduce((n,a)=>n+a.length,0);bench={rx,total,res};benchBusy=false;if(S&&S.rx===rx&&cur==='dashboard')drawBench()}
+const fmtMs=ms=>ms<1?ms.toFixed(2):ms<10?ms.toFixed(1):String(Math.round(ms));
+function drawBench(){if(!bench)return;
+if(bench.small){$('cBenchSub').textContent='Time to read the same strings, measured in this browser.';return setCard('cBench','<div class="empty">This expression accepts too few strings to time. Try one with a star or a plus.</div>',null)}
+const{res,total}=bench,ks=['nfa','dfa','min'],mx=Math.max(...ks.map(k=>res[k]));
+$('cBenchSub').textContent=`Time to read ${total.toLocaleString()} symbols, measured in this browser.`;
+const rows=ks.map(k=>({k,ms:res[k],mps:total/res[k]/1000}));
+const html=rows.map(r=>`<div class="hb-row"><span class="hb-l"><span class="dots" style="background:${ENT[r.k].c}"></span>${ENT[r.k].name}</span><div class="hb-t"><div class="hb-b" tabindex="0" style="width:${Math.max(r.ms/mx*74,1.5).toFixed(1)}%;background:${ENT[r.k].c}" data-tip="${fmtMs(r.ms)} ms\n${ENT[r.k].name} · ${r.mps.toFixed(1)} million symbols per second"></div><span class="hb-v">${fmtMs(r.ms)} ms</span></div></div>`).join('');
+const ratio=res.nfa/Math.min(res.dfa,res.min),rt=ratio>=10?Math.round(ratio):ratio.toFixed(1);
+const note=ratio>=1.2?`The DFA reads the same strings ${rt}× faster than the NFA, because it follows one state instead of a set of states.`:'On an expression this small the NFA and DFA run at about the same speed.';
+setCard('cBench',html+`<div class="hb-note">${note}</div><div><button class="btn" id="benchAgain" type="button">Measure again</button></div>`,{cols:['Stage','Time (ms)','Million symbols per second'],rows:rows.map(r=>[ENT[r.k].name,fmtMs(r.ms),r.mps.toFixed(1)])})}
+document.addEventListener('click',e=>{if(e.target.id==='benchAgain'){bench=null;benchBusy=false;cBench()}});
+let rz=null;addEventListener('resize',()=>{clearTimeout(rz);rz=setTimeout(()=>{if(cur==='dashboard'&&S)cProg()},150)});
+
+/* ---------- compare ---------- */
+function equiv(A,B){const syms=[...new Set([...A.al,...B.al,OTHER])].sort((p,q)=>p===OTHER?1:q===OTHER?-1:p<q?-1:1);
+const spare=[...'xyzqkj~#%&@§'].find(c=>!syms.includes(c));
+const stp=(D,p,c)=>{if(p<0)return-1;const y=sym(D,c);return y===null?-1:D.tr[p][y]},acc=(D,p)=>p>=0&&D.acc.has(p);
+const key=(p,q)=>p+','+q,seen=new Map([[key(A.start,B.start),null]]),queue=[[A.start,B.start]];
+for(let i=0;i<queue.length;i++){const[p,q]=queue[i];
+if(acc(A,p)!==acc(B,q)){const w=[];let k=key(p,q);while(seen.get(k)){const{pk,c}=seen.get(k);w.push(c);k=pk}w.reverse();return{eq:false,word:w.map(c=>c===OTHER?spare:c).join(''),aOnly:acc(A,p)}}
+for(const c of syms){const np=stp(A,p,c),nq=stp(B,q,c),k=key(np,nq);if(!seen.has(k)){seen.set(k,{pk:key(p,q),c});queue.push([np,nq])}}}
+return{eq:true}}
+function initCompare(){if(cmpInit)return;cmpInit=true;
+CMP.forEach(([a,b])=>{const x=document.createElement('button');x.type='button';x.innerHTML=`<code>${esc(a)}</code> vs <code>${esc(b)}</code>`;x.onclick=()=>{$('cmpA').value=a;$('cmpB').value=b;compare()};$('cmpPre').appendChild(x)});
+compare()}
+function compare(){const e=$('cmpErr');e.hidden=true;const a=$('cmpA').value,b=$('cmpB').value;
+try{const A=build(a).mins.hopcroft[0],B=build(b).mins.hopcroft[0],r=equiv(A,B);
+const msg=r.eq?`Both expressions accept exactly the same strings. Each one minimizes to a ${A.tr.length}-state DFA.`
+:`The shortest string that tells them apart is <code>${esc(disp(r.word))}</code>. Expression ${r.aOnly?'A accepts it and B rejects it':'B accepts it and A rejects it'}. A minimizes to ${plural(A.tr.length,'state')} and B to ${B.tr.length}.`;
+$('cmpRes').innerHTML=`<div class="verdict ${r.eq?'eq':'ne'}"><span class="big">${r.eq?'✓ Equivalent':'✗ Different'}</span><p>${msg}</p></div>
+<div class="cmp-d"><div class="field"><div class="lbl">A · minimal DFA</div><div class="dg" id="cmpDgA"></div></div><div class="field"><div class="lbl">B · minimal DFA</div><div class="dg" id="cmpDgB"></div></div></div>`;
+$('cmpDgA').innerHTML=render(gD(A),'cmpA');$('cmpDgB').innerHTML=render(gD(B),'cmpB');
+document.querySelectorAll('.cmp-d svg').forEach(s=>{s.style.width='100%';s.style.height='auto'})}
+catch(x){e.textContent=x.pos!==undefined?`${x.message}. Check the expression near character ${x.pos+1}.`:x.message;e.hidden=false}}
+$('cmpGo').onclick=compare;['cmpA','cmpB'].forEach(id=>$(id).addEventListener('keydown',e=>{if(e.key==='Enter')compare()}));
+
+/* ---------- start ---------- */
+heroInit();run();
+{let h='';try{h=(location.hash||'').slice(1)}catch(e){}show(VIEWS[h]?h:'tester',true)}
+</script>
+
+</body></html>
